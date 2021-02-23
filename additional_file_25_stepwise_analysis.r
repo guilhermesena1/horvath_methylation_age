@@ -3,24 +3,21 @@
 # and whose first column reports the CpG identifier
 # and whose remaining columns corresponds to samples (e.g. Illumina arrays).
 
-
-fastImputation=FALSE
+fastImputation <-FALSE
 
 #STEP 1: DEFINE QUALITY METRICS
 
-meanMethBySample =as.numeric(apply(as.matrix(dat1[,-1]),2,mean,na.rm=TRUE))
-minMethBySample   =as.numeric(apply(as.matrix(dat1[,-1]),2,min,na.rm=TRUE))
-maxMethBySample  =as.numeric(apply(as.matrix(dat1[,-1]),2,max,na.rm=TRUE))
+meanMethBySample <- as.numeric(apply(as.matrix(dat1[,-1]),2,mean,na.rm=TRUE))
+minMethBySample <- as.numeric(apply(as.matrix(dat1[,-1]),2,min,na.rm=TRUE))
+maxMethBySample  <- as.numeric(apply(as.matrix(dat1[,-1]),2,max,na.rm=TRUE))
 
-datMethUsed= t(dat1[,-1])
-colnames(datMethUsed)=as.character(dat1[,1])
+datMethUsed <- t(dat1[,-1])
+colnames(datMethUsed) <- as.character(dat1[,1])
 
-
-noMissingPerSample=apply(as.matrix(is.na(datMethUsed)),1,sum)
-table(noMissingPerSample)
+noMissingPerSample <- apply(as.matrix(is.na(datMethUsed)),1,sum)
 
 #STEP 2: Imputing 
-if (! fastImputation & nSamples>1 & max(noMissingPerSample,na.rm=TRUE)<3000 ){
+if (!fastImputation & nSamples>1 & max(noMissingPerSample,na.rm=TRUE)<3000) {
 
 # run the following code if there is at least one missing
 if ( max(noMissingPerSample,na.rm=TRUE)>0 ){
@@ -49,41 +46,52 @@ dimnames(datMethUsed)=dimnames1
 } # end of if
 } # end of if (! fastImputation )
 
+# STEP 3: Data normalization (each sample requires about 8 seconds).
+# It would be straightforward to parallelize this operation.
 
-
-
-
-
-# STEP 3: Data normalization (each sample requires about 8 seconds). It would be straightforward to parallelize this operation.
-
-if (normalizeData ){
-datMethUsedNormalized=BMIQcalibration(datM=datMethUsed,goldstandard.beta= probeAnnotation21kdatMethUsed$goldstandard2,plots=FALSE)
+if (normalizeData ) {
+  datMethUsedNormalized <- BMIQcalibration(
+    datM = datMethUsed, 
+    goldstandard.beta = probeAnnotation21kdatMethUsed$goldstandard2,plots=FALSE
+  )
 }
-if (!normalizeData ){ datMethUsedNormalized=datMethUsed }
-rm(datMethUsed); gc()
+if (!normalizeData ) {
+  datMethUsedNormalized=datMethUsed
+}
 
+rm(datMethUsed);
+gc();
 
+# STEP 4: Predict age and create a data frame for
+# the output (referred to as datout)
 
+selectCpGsClock <- is.element(dimnames(datMethUsedNormalized)[[2]],
+                              as.character(datClock$CpGmarker[-1]))
 
+if (sum(selectCpGsClock) < dim(datClock)[[1]]-1) {
+  stop("The CpGs listed in column 1 of the input data did not contain the CpGs needed for calculating DNAm age. Make sure to input cg numbers such as cg00075967.")
+}
 
-#STEP 4: Predict age and create a data frame for the output (referred to as datout)
-selectCpGsClock=is.element(dimnames(datMethUsedNormalized)[[2]], as.character(datClock$CpGmarker[-1]))
-if ( sum( selectCpGsClock) < dim(datClock)[[1]]-1 ) {stop("The CpGs listed in column 1 of the input data did not contain the CpGs needed for calculating DNAm age. Make sure to input cg numbers such as cg00075967.")}
-if ( sum( selectCpGsClock) > dim(datClock)[[1]]-1 ) {stop("ERROR: The CpGs listed in column 1 of the input data contain duplicate CpGs. Each row should report only one unique CpG marker (cg number).")}
-if (nSamples>1 ) {
-datMethClock0=data.frame(datMethUsedNormalized[,selectCpGsClock])
-datMethClock= data.frame(datMethClock0[ as.character(datClock$CpGmarker[-1])])
-dim(datMethClock)
-predictedAge=as.numeric(anti.trafo(datClock$CoefficientTraining[1]+as.matrix(datMethClock)%*% as.numeric(datClock$CoefficientTraining[-1])))
-} # end of if
+if (sum(selectCpGsClock) > dim(datClock)[[1]] - 1) {
+  stop("ERROR: The CpGs listed in column 1 of the input data contain duplicate CpGs. Each row should report only one unique CpG marker (cg number).")
+}
 
+if (nSamples > 1) {
+  datMethClock0 <- data.frame(datMethUsedNormalized[,selectCpGsClock])
+  datMethClock <- data.frame(datMethClock0[ as.character(datClock$CpGmarker[-1])])
+  
+  predictedAge <- as.numeric(anti.trafo(datClock$CoefficientTraining[1] + 
+                                        as.matrix(datMethClock)%*%
+                                        as.numeric(datClock$CoefficientTraining[-1])))
+}
 
-if (nSamples==1 ) {
-datMethUsedNormalized2=data.frame(rbind(datMethUsedNormalized,datMethUsedNormalized))
-datMethClock0=data.frame(datMethUsedNormalized2[,selectCpGsClock])
-datMethClock= data.frame(datMethClock0[ as.character(datClock$CpGmarker[-1])])
-dim(datMethClock)
-predictedAge=as.numeric(anti.trafo(datClock$CoefficientTraining[1]+as.matrix(datMethClock)%*% as.numeric(datClock$CoefficientTraining[-1])))
+if (nSamples == 1) {
+  datMethUsedNormalized2 <- data.frame(rbind(datMethUsedNormalized,datMethUsedNormalized))
+  datMethClock0 <- data.frame(datMethUsedNormalized2[,selectCpGsClock])
+  datMethClock <- data.frame(datMethClock0[ as.character(datClock$CpGmarker[-1])])
+  predictedAge <- as.numeric(anti.trafo(datClock$CoefficientTraining[1] + 
+                              as.matrix(datMethClock)%*% as.numeric(datClock$CoefficientTraining[-1])))
+
 predictedAge=predictedAge[1]
 } # end of if
 
