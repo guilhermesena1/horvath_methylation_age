@@ -118,7 +118,7 @@ set.seed(1)
 
 # Do you want to normalize the data (recommended)?
 normalizeData <- TRUE
-source("AdditionalFile25StepwiseAnalysis.txt")
+source("additional_file_25_stepwise_analysis.r")
 
 # STEP 4: Output the results 
 if (sum(datout$Comment  != "") == 0) {
